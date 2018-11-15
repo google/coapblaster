@@ -1,0 +1,48 @@
+#!/bin/sh
+
+[ $# '<' 1 ] && {
+   echo "Insufficient arguments." > /dev/stderr
+   echo "Syntax:" > /dev/stderr
+   echo "  $0 [BRANCH] <TAG>" > /dev/stderr
+   exit -1
+}
+
+die() {
+	exit -1
+}
+
+BRANCH=$1
+TAG=${2-$BRANCH}
+
+echo BRANCH=${BRANCH}
+echo TAG=${TAG}
+
+TEMP_REPO=`pwd`/temp
+
+rm -fr "${TEMP_REPO}" || die
+
+git clone .git "${TEMP_REPO}" -b "${BRANCH}" || die
+
+cd "${TEMP_REPO}" || die
+
+mvn javadoc:javadoc || die
+
+git checkout gh-pages
+
+mkdir -p releases/"${TAG}"/
+
+rm -fr releases/"${TAG}"/apidocs || die
+
+mv target/site/apidocs releases/"${TAG}"/apidocs || die
+
+git add releases/"${TAG}"/ || die
+
+git commit -m "Javadoc update for ${TAG}" || die
+
+cd .. || die
+
+git fetch "${TEMP_REPO}" gh-pages || die
+
+git branch -f gh-pages FETCH_HEAD
+
+rm -fr "${TEMP_REPO}"
