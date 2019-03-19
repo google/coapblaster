@@ -9,7 +9,7 @@
   </parent>
   <groupId>com.google.iot.coap</groupId>
   <artifactId>coap</artifactId>
-  <version>0.01.00</version>
+  <version>HEAD-SNAPSHOT</version>
   <name>CoapBlaster</name>
   <description>An experimental Java library for implementing CoAP clients and servers.</description>
   <url>https://github.com/google/coapblaster</url>
