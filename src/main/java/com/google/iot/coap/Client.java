@@ -54,7 +54,7 @@ public final class Client {
             LocalEndpointManager manager,
             @Nullable URI uri,
             @Nullable LocalEndpoint localEndpoint,
-            @Nullable SocketAddress remoteAddress) {
+            @Nullable SocketAddress remoteAddress) throws UnsupportedSchemeException {
 
         mLocalEndpointManager = manager;
 
@@ -79,11 +79,11 @@ public final class Client {
         }
     }
 
-    public Client(LocalEndpointManager manager, URI uri) {
+    public Client(LocalEndpointManager manager, URI uri) throws UnsupportedSchemeException {
         this(manager, uri, null, null);
     }
 
-    public Client(LocalEndpointManager manager, String uri) {
+    public Client(LocalEndpointManager manager, String uri) throws UnsupportedSchemeException {
         this(manager, URI.create(uri));
     }
 
@@ -101,7 +101,7 @@ public final class Client {
         return mUri;
     }
 
-    private void refreshLocalEndpoint() {
+    private void refreshLocalEndpoint() throws UnsupportedSchemeException {
         if (!mRemoteSocketAddressOverride) {
             mRemoteSocketAddress = null;
         }
@@ -127,7 +127,7 @@ public final class Client {
     /**
      * Changes the default URI by resolving {@code relativeUri} relative to the current default URI.
      */
-    public void changeUri(URI relativeUri) {
+    public void changeUri(URI relativeUri) throws UnsupportedSchemeException {
         String scheme = mUri.getScheme();
         String host = mUri.getHost();
         int port = mUri.getPort();
@@ -139,6 +139,18 @@ public final class Client {
                 || !Objects.equals(mUri.getPort(), port)) {
             refreshLocalEndpoint();
         }
+    }
+
+    /**
+     * A more limited version of {@link #changeUri} that does not throw checked exceptions.
+     */
+    public void changePath(String relativePath) {
+        if (URI.create(relativePath).getScheme() != null) {
+            throw new CoapRuntimeException("Full URIs are not allowed to use changePath(): \""
+                    + relativePath + "\"");
+        }
+
+        mUri = mUri.resolve(relativePath);
     }
 
     /**
@@ -158,7 +170,11 @@ public final class Client {
      */
     public void setProxySelector(ProxySelector proxySelector) {
         mProxySelector = proxySelector;
-        refreshLocalEndpoint();
+        try {
+            refreshLocalEndpoint();
+        } catch (UnsupportedSchemeException e) {
+            throw new CoapRuntimeException(e);
+        }
     }
 
     /**

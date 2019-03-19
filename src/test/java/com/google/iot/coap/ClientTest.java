@@ -41,7 +41,7 @@ class ClientTest {
     }
 
     @Test
-    void testClientNullPing() {
+    void testClientNullPing() throws Exception {
         Client client = new Client(mManager, "null://localhost/");
         try {
             assertThrows(TimeoutException.class, () -> client.ping().getResponse(500));
@@ -51,7 +51,7 @@ class ClientTest {
     }
 
     @Test
-    void getActiveTransactions() {
+    void getActiveTransactions() throws Exception {
         Client client = new Client(mManager, "null://localhost/");
         try {
             assertEquals(0, client.getActiveTransactions().size());
@@ -81,7 +81,7 @@ class ClientTest {
     }
 
     @Test
-    void cancelAllTransactions() {
+    void cancelAllTransactions() throws Exception {
         Client client = new Client(mManager, "null://localhost/");
         try {
             Transaction transaction = client.ping();

@@ -26,6 +26,7 @@ import java.net.SocketException;
 import java.util.Map;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.logging.Logger;
+
 import com.google.common.util.concurrent.ListeningScheduledExecutorService;
 import com.google.common.util.concurrent.MoreExecutors;
 import org.checkerframework.checker.nullness.qual.Nullable;
@@ -127,6 +128,18 @@ public class LocalEndpointManager implements Closeable {
         }
     }
 
+    public boolean supportsScheme(String scheme) {
+        switch (scheme) {
+            case Coap.SCHEME_LOOPBACK:
+            case Coap.SCHEME_NULL:
+            case Coap.SCHEME_UDP:
+                return true;
+
+            default:
+                return mSchemeEndpointMap.containsKey(scheme);
+        }
+    }
+
     /**
      * Returns a {@link LocalEndpoint} for the given scheme that is suitable for sending outbound
      * requests (ie, for use with {@link Client}). This method should not be used to obtain
@@ -144,9 +157,10 @@ public class LocalEndpointManager implements Closeable {
      * <p>Additional scheme types are planned.
      *
      * @param scheme the scheme for the endpoint
-     * @return a {@link LocalEndpoint} instance or null if the scheme is unknown.
+     * @return a {@link LocalEndpoint} instance
+     * @throws UnsupportedSchemeException if the given scheme is not supported
      */
-    public @Nullable LocalEndpoint getLocalEndpointForScheme(String scheme) {
+    public LocalEndpoint getLocalEndpointForScheme(String scheme) throws UnsupportedSchemeException {
         LocalEndpoint ret = mSchemeEndpointMap.get(scheme);
         if (ret == null) {
             switch (scheme) {
@@ -184,10 +198,13 @@ public class LocalEndpointManager implements Closeable {
 
                     mSchemeEndpointMap.put(scheme, ret);
                 } catch (IOException x) {
-                    x.printStackTrace();
-                    ret = null;
+                    throw new CoapRuntimeException(x);
                 }
             }
+        }
+
+        if (ret == null) {
+            throw new UnsupportedSchemeException("Unsupported URI scheme \"" + scheme + "\"");
         }
 
         return ret;
