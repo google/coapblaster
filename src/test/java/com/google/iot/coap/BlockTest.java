@@ -21,103 +21,28 @@ import java.io.IOException;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Logger;
+
+import com.google.common.util.concurrent.ListeningScheduledExecutorService;
+import com.google.common.util.concurrent.MoreExecutors;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.MockitoAnnotations;
 
 @SuppressWarnings("ConstantConditions")
-class BlockTest {
+class BlockTest extends LoopbackServerClientTestBase {
     private static final boolean DEBUG = false;
-    private static final Logger LOGGER =
-            Logger.getLogger(ClientServerTest.class.getCanonicalName());
-
-    ScheduledExecutorService mExecutor = null;
-    volatile Throwable mThrowable = null;
-
-    private LocalEndpointManager mContext = null;
-    private Server mServer = null;
-    private Client mClient = null;
-    private Resource<InboundRequestHandler> mRoot = null;
-
-    public void rethrow() {
-        if (mExecutor != null) {
-            try {
-                mExecutor.shutdown();
-                assertTrue(mExecutor.awaitTermination(1, TimeUnit.SECONDS));
-            } catch (Exception x) {
-                if (mThrowable == null) {
-                    mThrowable = x;
-                } else {
-                    LOGGER.info("Got exception while flushing queue: " + x);
-                    x.printStackTrace();
-                }
-            }
-            mExecutor = null;
-        }
-        if (mThrowable != null) {
-            Throwable x = mThrowable;
-            mThrowable = null;
-            LOGGER.info("Rethrowing throwable: " + x);
-            if (x instanceof Error) throw (Error) x;
-            if (x instanceof RuntimeException) throw (RuntimeException) x;
-            throw new RuntimeException(x);
-        }
-    }
+    private static final Logger LOGGER = Logger.getLogger(BlockTest.class.getCanonicalName());
 
     @BeforeEach
-    public void before() throws IOException {
+    public void before() throws Exception {
+        super.before();
         MockitoAnnotations.initMocks(this);
-        mThrowable = null;
-
-        mExecutor =
-                new FakeScheduledExecutorService() {
-                    // mExecutor = new ScheduledThreadPoolExecutor(1) {
-                    @Override
-                    public void execute(Runnable command) {
-                        super.execute(
-                                () -> {
-                                    try {
-                                        command.run();
-                                    } catch (Throwable x) {
-                                        LOGGER.info("Caught throwable: " + x);
-                                        x.printStackTrace();
-                                        mThrowable = x;
-                                    }
-                                });
-                    }
-                };
-
-        mContext =
-                new LocalEndpointManager() {
-
-                    @Override
-                    public ScheduledExecutorService getExecutor() {
-                        return mExecutor;
-                    }
-                };
-        mServer = new Server(mContext);
-        mClient = new Client(mContext, "loop://localhost/");
-        mServer.addLocalEndpoint(mContext.getLocalEndpointForScheme("loop"));
-        mRoot = new Resource<>();
-        mServer.setRequestHandler(mRoot);
-        mServer.start();
-    }
-
-    private void tick(int durationInMs) throws InterruptedException {
-        if (mExecutor instanceof FakeScheduledExecutorService) {
-            ((FakeScheduledExecutorService) mExecutor).tick(durationInMs);
-        } else {
-            Thread.sleep(durationInMs);
-        }
     }
 
     @AfterEach
-    public void after() throws IOException {
-        mClient.cancelAllTransactions();
-        mServer.close();
-        mContext.close();
-        rethrow();
+    public void after() throws Exception {
+        super.after();
     }
 
     final String mLotsOfJunk =

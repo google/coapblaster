@@ -18,9 +18,7 @@ package com.google.iot.coap;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
-import java.io.IOException;
 import java.util.concurrent.Future;
-import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Logger;
 import org.junit.jupiter.api.AfterEach;
@@ -32,100 +30,27 @@ import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 
 @SuppressWarnings("ConstantConditions")
-class ObservableTest {
+class ObservableTest extends LoopbackServerClientTestBase {
     private static final boolean DEBUG = false;
     private static final Logger LOGGER =
-            Logger.getLogger(ClientServerTest.class.getCanonicalName());
+            Logger.getLogger(ObservableTest.class.getCanonicalName());
 
-    ScheduledExecutorService mExecutor = null;
-    volatile Throwable mThrowable = null;
-
-    private LocalEndpointManager mContext = null;
-    private Server mServer = null;
-    private Client mClient = null;
     private StartTimeCounterResource mChild = null;
-    private Resource mRoot = null;
-
-    public void rethrow() {
-        if (mExecutor != null) {
-            try {
-                mExecutor.shutdown();
-                assertTrue(mExecutor.awaitTermination(1, TimeUnit.SECONDS));
-            } catch (Exception x) {
-                if (mThrowable == null) {
-                    mThrowable = x;
-                } else {
-                    LOGGER.info("Got exception while flushing queue: " + x);
-                    x.printStackTrace();
-                }
-            }
-            mExecutor = null;
-        }
-        if (mThrowable != null) {
-            Throwable x = mThrowable;
-            mThrowable = null;
-            LOGGER.info("Rethrowing throwable: " + x);
-            if (x instanceof Error) throw (Error) x;
-            if (x instanceof RuntimeException) throw (RuntimeException) x;
-            throw new RuntimeException(x);
-        }
-    }
+    private static final int OBSERVABLE_UPDATE_PERIOD_MS = 20;
 
     @BeforeEach
-    public void before() throws IOException {
-        MockitoAnnotations.initMocks(this);
-        mThrowable = null;
+    public void before() throws Exception {
+        super.before();
 
-        mExecutor =
-                new FakeScheduledExecutorService() {
-                    // mExecutor = new ScheduledThreadPoolExecutor(1) {
-                    @Override
-                    public void execute(Runnable command) {
-                        super.execute(
-                                () -> {
-                                    try {
-                                        command.run();
-                                    } catch (Throwable x) {
-                                        LOGGER.info("Caught throwable: " + x);
-                                        x.printStackTrace();
-                                        mThrowable = x;
-                                    }
-                                });
-                    }
-                };
-
-        mContext =
-                new LocalEndpointManager() {
-
-                    @Override
-                    public ScheduledExecutorService getExecutor() {
-                        return mExecutor;
-                    }
-                };
-        mServer = new Server(mContext);
-        mClient = new Client(mContext, "loop://localhost/");
-        mServer.addLocalEndpoint(mContext.getLocalEndpointForScheme("loop"));
-        mRoot = new Resource();
         mChild = new StartTimeCounterResource();
         mRoot.addChild("hello", mChild);
-        mServer.setRequestHandler(mRoot);
-        mServer.start();
-    }
 
-    private void tick(int durationInMs) throws InterruptedException {
-        if (mExecutor instanceof FakeScheduledExecutorService) {
-            ((FakeScheduledExecutorService) mExecutor).tick(durationInMs);
-        } else {
-            Thread.sleep(durationInMs);
-        }
+        MockitoAnnotations.initMocks(this);
     }
 
     @AfterEach
-    public void after() throws IOException {
-        mClient.cancelAllTransactions();
-        mServer.close();
-        mContext.close();
-        rethrow();
+    public void after() throws Exception {
+        super.after();
     }
 
     class StartTimeCounterResource
@@ -141,9 +66,9 @@ class ObservableTest {
                     new Observable.Callback() {
                         @Override
                         public void onHasRemoteObservers(Observable observable) {
-                            mScheduledTrigger =
-                                    mExecutor.scheduleAtFixedRate(
-                                            mTriggerRunnable, 20, 20, TimeUnit.MILLISECONDS);
+                            mScheduledTrigger = mExecutor.scheduleAtFixedRate(
+                                    mTriggerRunnable, OBSERVABLE_UPDATE_PERIOD_MS,
+                                    OBSERVABLE_UPDATE_PERIOD_MS, TimeUnit.MILLISECONDS);
                         }
 
                         @Override
@@ -298,49 +223,54 @@ class ObservableTest {
 
     @Mock Transaction.Callback transactionCallbackMock;
 
-    @Test
     Transaction triggerWithObservers() throws Exception {
+        try {
+            Transaction transaction =
+                    mClient.newRequestBuilder().changePath("hello").addOption(Option.OBSERVE).send();
 
-        Transaction transaction =
-                mClient.newRequestBuilder().changePath("hello").addOption(Option.OBSERVE).send();
+            transaction.registerCallback(Runnable::run, transactionCallbackMock);
 
-        transaction.registerCallback(Runnable::run, transactionCallbackMock);
+            tick(1);
 
-        tick(1);
+            Message response = transaction.getResponse(1500);
 
-        Message response = transaction.getResponse(1500);
+            // Verify that everything is as we expect it.
+            verify(transactionCallbackMock)
+                    .onTransactionResponse(
+                            eq(mContext.getLocalEndpointForScheme(Coap.SCHEME_LOOPBACK)), messageCaptor.capture());
+            assertEquals(response, messageCaptor.getValue());
+            verify(transactionCallbackMock, never()).onTransactionFinished();
+            verify(transactionCallbackMock, never()).onTransactionException(null);
+            assertTrue(response.getOptionSet().hasObserve());
+            assertEquals(1, mChild.onGetObservable().getObserverCount());
 
-        // Verify that everything is as we expect it.
-        verify(transactionCallbackMock)
-                .onTransactionResponse(
-                        eq(mContext.getLocalEndpointForScheme("loop")), messageCaptor.capture());
-        assertEquals(response, messageCaptor.getValue());
-        verify(transactionCallbackMock, never()).onTransactionFinished();
-        verify(transactionCallbackMock, never()).onTransactionException(null);
-        assertTrue(response.getOptionSet().hasObserve());
-        assertEquals(1, mChild.onGetObservable().getObserverCount());
+            clearInvocations(transactionCallbackMock);
 
-        clearInvocations(transactionCallbackMock);
+            tick(OBSERVABLE_UPDATE_PERIOD_MS + 1);
+            tick(OBSERVABLE_UPDATE_PERIOD_MS + 1);
 
-        tick(40);
+            verify(transactionCallbackMock, atMost(3))
+                    .onTransactionResponse(eq(mContext.getLocalEndpointForScheme(Coap.SCHEME_LOOPBACK)), any());
+            verify(transactionCallbackMock, atLeast(2))
+                    .onTransactionResponse(eq(mContext.getLocalEndpointForScheme(Coap.SCHEME_LOOPBACK)), any());
+            verify(transactionCallbackMock, never()).onTransactionFinished();
+            verify(transactionCallbackMock, never()).onTransactionException(null);
 
-        verify(transactionCallbackMock, atMost(3))
-                .onTransactionResponse(eq(mContext.getLocalEndpointForScheme("loop")), any());
-        verify(transactionCallbackMock, atLeast(2))
-                .onTransactionResponse(eq(mContext.getLocalEndpointForScheme("loop")), any());
-        verify(transactionCallbackMock, never()).onTransactionFinished();
-        verify(transactionCallbackMock, never()).onTransactionException(null);
+            clearInvocations(transactionCallbackMock);
 
-        clearInvocations(transactionCallbackMock);
+            response = transaction.getResponse();
 
-        response = transaction.getResponse();
+            // Verify that everything is as we expect it.
+            assertTrue(response.getOptionSet().hasObserve());
+            assertEquals((Integer) 2, response.getOptionSet().getObserve());
+            assertEquals(1, mChild.onGetObservable().getObserverCount());
 
-        // Verify that everything is as we expect it.
-        assertTrue(response.getOptionSet().hasObserve());
-        assertEquals((Integer) 2, response.getOptionSet().getObserve());
-        assertEquals(1, mChild.onGetObservable().getObserverCount());
-
-        return transaction;
+            return transaction;
+        }
+        catch (Throwable t) {
+            dumpLogs();
+            throw t;
+        }
     }
 
     @Test
