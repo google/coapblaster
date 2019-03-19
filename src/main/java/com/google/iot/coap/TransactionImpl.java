@@ -99,6 +99,7 @@ final class TransactionImpl implements Transaction, OutboundMessageHandler {
                                     this::firedObservationRetryTimer,
                                     timeout,
                                     TimeUnit.MILLISECONDS);
+            mLocalEndpoint.cancelAtClose(mObservationRetryTimer);
         }
     }
 
@@ -238,7 +239,6 @@ final class TransactionImpl implements Transaction, OutboundMessageHandler {
                 handleException(e);
             }
         }
-        return;
     }
 
     @Override

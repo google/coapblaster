@@ -171,10 +171,10 @@ class InboundRequestInstance implements InboundRequest, OutboundMessageHandler {
 
             if (mMessage.isMulticast()) {
                 // Add some jitter to the response for multicast responses.
-                mExecutor.schedule(
+                localEndpoint.cancelAtClose(mExecutor.schedule(
                         () -> localEndpoint.sendRequest(response, this),
                         localEndpoint.getBehaviorContext().calcMulticastResponseDelay(),
-                        TimeUnit.MILLISECONDS);
+                        TimeUnit.MILLISECONDS));
             } else {
                 localEndpoint.sendRequest(response, this);
             }
@@ -182,10 +182,10 @@ class InboundRequestInstance implements InboundRequest, OutboundMessageHandler {
         } else {
             if (mMessage.isMulticast()) {
                 // Add some jitter to the response for multicast responses.
-                mExecutor.schedule(
+                localEndpoint.cancelAtClose(mExecutor.schedule(
                         () -> localEndpoint.sendResponse(response),
                         localEndpoint.getBehaviorContext().calcMulticastResponseDelay(),
-                        TimeUnit.MILLISECONDS);
+                        TimeUnit.MILLISECONDS));
             } else {
                 localEndpoint.sendResponse(response);
             }

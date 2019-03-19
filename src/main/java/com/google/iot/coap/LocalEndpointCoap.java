@@ -102,13 +102,29 @@ public final class LocalEndpointCoap extends AbstractLocalEndpoint {
     @Override
     public void close() throws IOException {
         try {
-            getStopLock().lock();
-            mThreadShouldStop = true;
-            mListeningThread.interrupt();
-            mSocket.close();
-            super.close();
+            try {
+                getStopLock().lock();
+                mThreadShouldStop = true;
+                mListeningThread.interrupt();
+                mSocket.close();
+            } finally {
+                super.close();
+            }
         } finally {
             getStopLock().unlock();
+        }
+
+        try {
+            // Wait a maximum of one second to join the IO thread.
+            // It should actually join almost immediately.
+            mListeningThread.join(1000);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            return;
+        }
+
+        if (mListeningThread.isAlive()) {
+            throw new CoapRuntimeException("Unable to shutdown internal thread");
         }
     }
 

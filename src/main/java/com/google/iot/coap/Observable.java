@@ -135,6 +135,7 @@ public final class Observable {
                 }
                 mKeepaliveTimer =
                         mExecutor.schedule(this::sendKeepalive, timeout, TimeUnit.MILLISECONDS);
+                mInboundRequest.getLocalEndpoint().cancelAtClose(mKeepaliveTimer);
             }
         }
 

@@ -17,7 +17,10 @@ package com.google.iot.coap;
 
 import java.io.IOException;
 import java.net.*;
+import java.util.Collections;
+import java.util.HashSet;
 import java.util.Objects;
+import java.util.Set;
 import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -26,6 +29,7 @@ import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import com.google.common.util.concurrent.ListenableFuture;
 import com.google.common.util.concurrent.ListeningScheduledExecutorService;
 import org.checkerframework.checker.nullness.qual.Nullable;
 
@@ -44,6 +48,7 @@ abstract class AbstractLocalEndpoint implements LocalEndpoint {
     private final Stack.Outbox mOutbox;
     private BehaviorContext mBehaviorContext;
     private Interceptor mInterceptor = null;
+    private final Set<ListenableFuture<?>> mCancelAtClose = new HashSet<>();
 
     /** @hide */
     protected Lock getRunLock() {
@@ -162,10 +167,41 @@ abstract class AbstractLocalEndpoint implements LocalEndpoint {
     }
 
     @Override
+    public void cancelAtClose(ListenableFuture<?> futureToCancelAtClose) {
+        mExecutor.execute(()->{
+            if (!futureToCancelAtClose.isDone()) {
+                synchronized (mCancelAtClose) {
+                    mCancelAtClose.add(futureToCancelAtClose);
+                }
+
+                futureToCancelAtClose.addListener(()-> {
+                    synchronized (mCancelAtClose) {
+                        mCancelAtClose.remove(futureToCancelAtClose);
+                    }
+                }, Runnable::run);
+            }
+        });
+    }
+
+    @Override
     public void close() throws IOException {
+        if (DEBUG) LOGGER.info("close");
         try {
             getStopLock().lock();
+            setRequestHandler(null);
             stop();
+
+            Set<ListenableFuture<?>> cancelAtCloseCopy;
+
+            synchronized (mCancelAtClose) {
+                cancelAtCloseCopy = new HashSet<>(mCancelAtClose);
+                mCancelAtClose.clear();
+            }
+
+            for (ListenableFuture<?> future : cancelAtCloseCopy) {
+                future.cancel(true);
+            }
+
             mStack.close();
         } finally {
             getStopLock().unlock();

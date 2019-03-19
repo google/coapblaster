@@ -21,6 +21,7 @@ import java.net.NetworkInterface;
 import java.net.SocketAddress;
 import java.net.URI;
 import java.util.concurrent.ScheduledExecutorService;
+import com.google.common.util.concurrent.ListenableFuture;
 import com.google.common.util.concurrent.ListeningScheduledExecutorService;
 import org.checkerframework.checker.nullness.qual.Nullable;
 
@@ -143,6 +144,13 @@ public interface LocalEndpoint extends Closeable {
 
     /** {@hide} */
     ListeningScheduledExecutorService getExecutor();
+
+    /**
+     * Ensures that the given future will be cancelled if it is still outstanding when
+     * {@link #close()} is called.
+     * @param futureToCancelAtClose The future to ensure is canceled at close.
+     */
+    void cancelAtClose(ListenableFuture<?> futureToCancelAtClose);
 
     void setInterceptor(Interceptor interceptor);
 }
