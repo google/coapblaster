@@ -15,6 +15,8 @@
  */
 package com.google.iot.coap;
 
+import com.google.common.util.concurrent.ListenableFuture;
+import com.google.common.util.concurrent.ListeningScheduledExecutorService;
 import com.google.errorprone.annotations.CanIgnoreReturnValue;
 import java.util.Arrays;
 import java.util.HashSet;
@@ -64,8 +66,8 @@ public final class Observable {
         private volatile boolean mForceSendNextUpdate = false;
         private final KeyToken mKey;
         private int mMaxAge = TransactionImpl.DEFAULT_OBSERVATION_REFRESH_TIMEOUT;
-        private ScheduledExecutorService mExecutor;
-        private Future<?> mKeepaliveTimer = null;
+        private ListeningScheduledExecutorService mExecutor;
+        private ListenableFuture<?> mKeepaliveTimer = null;
 
         RemoteObserver(InboundRequest inboundRequest) {
             mKey = new KeyToken(inboundRequest.getMessage());

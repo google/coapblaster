@@ -21,6 +21,7 @@ import java.net.NetworkInterface;
 import java.net.SocketAddress;
 import java.net.URI;
 import java.util.concurrent.ScheduledExecutorService;
+import com.google.common.util.concurrent.ListeningScheduledExecutorService;
 import org.checkerframework.checker.nullness.qual.Nullable;
 
 /**
@@ -138,10 +139,10 @@ public interface LocalEndpoint extends Closeable {
     URI createUriFromSocketAddress(SocketAddress socketAddress);
 
     /** {@hide} */
-    void setExecutor(ScheduledExecutorService executor);
+    void setExecutor(ListeningScheduledExecutorService executor);
 
     /** {@hide} */
-    ScheduledExecutorService getExecutor();
+    ListeningScheduledExecutorService getExecutor();
 
     void setInterceptor(Interceptor interceptor);
 }

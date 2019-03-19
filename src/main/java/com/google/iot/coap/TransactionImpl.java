@@ -45,7 +45,7 @@ final class TransactionImpl implements Transaction, OutboundMessageHandler {
     private volatile boolean mIsMulticast;
     private final boolean mIsObserving;
     private int mObservationRetryTimeout = DEFAULT_OBSERVATION_REFRESH_TIMEOUT;
-    private Future<?> mObservationRetryTimer = null;
+    private ListenableFuture<?> mObservationRetryTimer = null;
 
     private BlockReconstructor mBlockReconstructor = null;
 

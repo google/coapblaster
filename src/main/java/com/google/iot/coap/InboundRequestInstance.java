@@ -15,6 +15,8 @@
  */
 package com.google.iot.coap;
 
+import com.google.common.util.concurrent.ListeningScheduledExecutorService;
+
 import java.io.IOException;
 import java.util.LinkedList;
 import java.util.List;
@@ -41,10 +43,10 @@ class InboundRequestInstance implements InboundRequest, OutboundMessageHandler {
 
     private List<Callback> mCallbacks = null;
 
-    private final ScheduledExecutorService mExecutor;
+    private final ListeningScheduledExecutorService mExecutor;
 
     InboundRequestInstance(
-            ScheduledExecutorService executor, LocalEndpoint localEndpoint, Message msg) {
+            ListeningScheduledExecutorService executor, LocalEndpoint localEndpoint, Message msg) {
         mExecutor = executor;
         mLocalEndpoint = localEndpoint;
         mMessage = msg;

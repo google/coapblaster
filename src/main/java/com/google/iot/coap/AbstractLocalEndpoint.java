@@ -26,6 +26,7 @@ import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import com.google.common.util.concurrent.ListeningScheduledExecutorService;
 import org.checkerframework.checker.nullness.qual.Nullable;
 
 abstract class AbstractLocalEndpoint implements LocalEndpoint {
@@ -33,7 +34,7 @@ abstract class AbstractLocalEndpoint implements LocalEndpoint {
     private static final Logger LOGGER =
             Logger.getLogger(AbstractLocalEndpoint.class.getCanonicalName());
 
-    private ScheduledExecutorService mExecutor = null;
+    private ListeningScheduledExecutorService mExecutor = null;
     private InboundRequestHandler mInboundRequestHandler = null;
     private final LocalEndpointManager mManager;
 
@@ -172,7 +173,7 @@ abstract class AbstractLocalEndpoint implements LocalEndpoint {
     }
 
     @Override
-    public ScheduledExecutorService getExecutor() {
+    public ListeningScheduledExecutorService getExecutor() {
         if (mExecutor == null) {
             mExecutor = mManager.getExecutor();
         }
@@ -180,7 +181,7 @@ abstract class AbstractLocalEndpoint implements LocalEndpoint {
     }
 
     @Override
-    public void setExecutor(ScheduledExecutorService executor) {
+    public void setExecutor(ListeningScheduledExecutorService executor) {
         mExecutor = executor;
     }
 

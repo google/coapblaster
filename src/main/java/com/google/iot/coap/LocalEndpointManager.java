@@ -26,6 +26,8 @@ import java.net.SocketException;
 import java.util.Map;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.logging.Logger;
+import com.google.common.util.concurrent.ListeningScheduledExecutorService;
+import com.google.common.util.concurrent.MoreExecutors;
 import org.checkerframework.checker.nullness.qual.Nullable;
 
 /** Manager class for {@link LocalEndpoint} instances. */
@@ -34,7 +36,7 @@ public class LocalEndpointManager implements Closeable {
     private static final Logger LOGGER =
             Logger.getLogger(LocalEndpointManager.class.getCanonicalName());
 
-    private ScheduledExecutorService mExecutor = null;
+    private ListeningScheduledExecutorService mExecutor = null;
     private final Map<String, LocalEndpoint> mSchemeEndpointMap = Maps.newConcurrentMap();
 
     private final SocketAddressLookup mInetLookup = SocketAddressLookup.createInetLookup();
@@ -44,14 +46,14 @@ public class LocalEndpointManager implements Closeable {
 
     private Interceptor mDefaultInterceptor = null;
 
-    public LocalEndpointManager(ScheduledExecutorService executor) {
+    public LocalEndpointManager(ListeningScheduledExecutorService executor) {
         mExecutor = executor;
         mInetLookup.setExecutor(getExecutor());
         mNullLookup.setExecutor(getExecutor());
     }
 
     public LocalEndpointManager() {
-        this(Utils.getSafeExecutor());
+        this(MoreExecutors.listeningDecorator(Utils.getSafeExecutor()));
     }
 
     public BehaviorContext getDefaultBehaviorContext() {
@@ -92,10 +94,10 @@ public class LocalEndpointManager implements Closeable {
     }
 
     /**
-     * Returns the default {@link ScheduledExecutorService} associated with this context instance.
+     * Returns the default {@link ListeningScheduledExecutorService} associated with this context instance.
      * This can optionally be used by other objects associated with this context instance.
      */
-    public ScheduledExecutorService getExecutor() {
+    public ListeningScheduledExecutorService getExecutor() {
         return mExecutor;
     }
 
