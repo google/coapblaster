@@ -73,7 +73,9 @@ abstract class AbstractLocalEndpoint implements LocalEndpoint {
                         return;
                     }
 
-                    deliverOutboundMessage(msg);
+                    getExecutor().execute(() -> {
+                        deliverOutboundMessage(msg);
+                    });
                 };
 
         mStack = new Stack(manager, mOutbox);
