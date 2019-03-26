@@ -36,7 +36,9 @@ class ObservableTest extends LoopbackServerClientTestBase {
             Logger.getLogger(ObservableTest.class.getCanonicalName());
 
     private StartTimeCounterResource mChild = null;
-    private static final int OBSERVABLE_UPDATE_PERIOD_MS = 20;
+    private static final int OBSERVABLE_UPDATE_PERIOD_MS = 1000;
+
+    private LocalEndpoint mExpectedLocalEndpoint;
 
     @BeforeEach
     public void before() throws Exception {
@@ -44,6 +46,7 @@ class ObservableTest extends LoopbackServerClientTestBase {
 
         mChild = new StartTimeCounterResource();
         mRoot.addChild("hello", mChild);
+        mExpectedLocalEndpoint = mContext.getLocalEndpointForScheme(Coap.SCHEME_LOOPBACK);
 
         MockitoAnnotations.initMocks(this);
     }
@@ -223,26 +226,37 @@ class ObservableTest extends LoopbackServerClientTestBase {
 
     @Mock Transaction.Callback transactionCallbackMock;
 
-    Transaction triggerWithObservers() throws Exception {
+
+    Transaction createObservingTransaction() throws Exception {
+        Transaction transaction =
+                mClient.newRequestBuilder().changePath("hello").addOption(Option.OBSERVE).send();
+
+        transaction.registerCallback(Runnable::run, transactionCallbackMock);
+
+        tick(1);
+
+        Message response = transaction.getResponse(1500);
+
+        // Verify that everything is as we expect it.
+        verify(transactionCallbackMock)
+                .onTransactionResponse(
+                        eq(mExpectedLocalEndpoint), messageCaptor.capture());
+        assertEquals(response, messageCaptor.getValue());
+        verify(transactionCallbackMock, never()).onTransactionFinished();
+        verify(transactionCallbackMock, never()).onTransactionException(null);
+        assertTrue(response.getOptionSet().hasObserve());
+        assertEquals(1, mChild.onGetObservable().getObserverCount());
+
+        clearInvocations(transactionCallbackMock);
+
+        return transaction;
+    }
+
+
+    @Test
+    void triggerWithObservers() throws Exception {
         try {
-            Transaction transaction =
-                    mClient.newRequestBuilder().changePath("hello").addOption(Option.OBSERVE).send();
-
-            transaction.registerCallback(Runnable::run, transactionCallbackMock);
-
-            tick(1);
-
-            Message response = transaction.getResponse(1500);
-
-            // Verify that everything is as we expect it.
-            verify(transactionCallbackMock)
-                    .onTransactionResponse(
-                            eq(mContext.getLocalEndpointForScheme(Coap.SCHEME_LOOPBACK)), messageCaptor.capture());
-            assertEquals(response, messageCaptor.getValue());
-            verify(transactionCallbackMock, never()).onTransactionFinished();
-            verify(transactionCallbackMock, never()).onTransactionException(null);
-            assertTrue(response.getOptionSet().hasObserve());
-            assertEquals(1, mChild.onGetObservable().getObserverCount());
+            Transaction transaction = createObservingTransaction();
 
             clearInvocations(transactionCallbackMock);
 
@@ -250,22 +264,20 @@ class ObservableTest extends LoopbackServerClientTestBase {
             tick(OBSERVABLE_UPDATE_PERIOD_MS + 1);
 
             verify(transactionCallbackMock, atMost(3))
-                    .onTransactionResponse(eq(mContext.getLocalEndpointForScheme(Coap.SCHEME_LOOPBACK)), any());
+                    .onTransactionResponse(eq(mExpectedLocalEndpoint), any());
             verify(transactionCallbackMock, atLeast(2))
-                    .onTransactionResponse(eq(mContext.getLocalEndpointForScheme(Coap.SCHEME_LOOPBACK)), any());
+                    .onTransactionResponse(eq(mExpectedLocalEndpoint), any());
             verify(transactionCallbackMock, never()).onTransactionFinished();
             verify(transactionCallbackMock, never()).onTransactionException(null);
 
             clearInvocations(transactionCallbackMock);
 
-            response = transaction.getResponse();
+            Message response = transaction.getResponse();
 
             // Verify that everything is as we expect it.
             assertTrue(response.getOptionSet().hasObserve());
-            assertEquals((Integer) 2, response.getOptionSet().getObserve());
+            assertTrue(2 <= response.getOptionSet().getObserve());
             assertEquals(1, mChild.onGetObservable().getObserverCount());
-
-            return transaction;
         }
         catch (Throwable t) {
             dumpLogs();
@@ -274,8 +286,45 @@ class ObservableTest extends LoopbackServerClientTestBase {
     }
 
     @Test
+    void triggerWithObserversOverTime() throws Exception {
+        int i = 0;
+        try {
+            Transaction transaction = createObservingTransaction();
+
+            for (i = 0; i < 1500 ; i++) {
+                clearInvocations(transactionCallbackMock);
+
+                tick(OBSERVABLE_UPDATE_PERIOD_MS);
+                tick(OBSERVABLE_UPDATE_PERIOD_MS);
+                tick(1);
+
+                verify(transactionCallbackMock, atMost(3))
+                        .onTransactionResponse(eq(mExpectedLocalEndpoint), any());
+                verify(transactionCallbackMock, atLeast(2))
+                        .onTransactionResponse(eq(mExpectedLocalEndpoint), any());
+                verify(transactionCallbackMock, never()).onTransactionFinished();
+                verify(transactionCallbackMock, never()).onTransactionException(null);
+            }
+
+            clearInvocations(transactionCallbackMock);
+
+            Message response = transaction.getResponse();
+
+            // Verify that everything is as we expect it.
+            assertTrue(response.getOptionSet().hasObserve());
+            assertTrue(2*i <= response.getOptionSet().getObserve());
+            assertEquals(1, mChild.onGetObservable().getObserverCount());
+        }
+        catch (Throwable t) {
+            LOGGER.info("i = " + i);
+            dumpLogs();
+            throw t;
+        }
+    }
+
+    @Test
     void explicitObservationCancellation() throws Exception {
-        Transaction transaction = triggerWithObservers();
+        Transaction transaction = createObservingTransaction();
 
         tick(1);
 
@@ -289,7 +338,7 @@ class ObservableTest extends LoopbackServerClientTestBase {
         assertTrue(transaction.isCancelled());
         assertFalse(transaction.isActive());
 
-        tick(40);
+        tick(OBSERVABLE_UPDATE_PERIOD_MS*2);
 
         verify(transactionCallbackMock, never()).onTransactionResponse(any(), any());
 
@@ -299,7 +348,7 @@ class ObservableTest extends LoopbackServerClientTestBase {
 
     @Test
     void implicitObservationCancellation() throws Exception {
-        Transaction transaction = triggerWithObservers();
+        Transaction transaction = createObservingTransaction();
 
         tick(1);
 
@@ -313,7 +362,8 @@ class ObservableTest extends LoopbackServerClientTestBase {
         assertTrue(transaction.isCancelled());
         assertFalse(transaction.isActive());
 
-        tick(40);
+        tick(OBSERVABLE_UPDATE_PERIOD_MS);
+        tick(OBSERVABLE_UPDATE_PERIOD_MS);
 
         verify(transactionCallbackMock, never()).onTransactionResponse(any(), any());
 
