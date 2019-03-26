@@ -69,10 +69,13 @@ class DeduplicationLayer extends AbstractLayer {
     @Override
     public void handleOutboundResponse(LocalEndpoint localEndpoint, Message msg) {
         final KeyMid key = new KeyMid(msg);
-        final Entry entry = mLookupTable.get(key);
 
-        if (entry != null && entry.mResponse == null) {
-            entry.mResponse = msg.copy();
+        if (!key.isMulticast()) {
+            final Entry entry = mLookupTable.get(key);
+
+            if (entry != null && entry.mResponse == null) {
+                entry.mResponse = msg.copy();
+            }
         }
 
         super.handleOutboundResponse(localEndpoint, msg);
@@ -82,6 +85,13 @@ class DeduplicationLayer extends AbstractLayer {
     public void handleInboundRequest(InboundRequest inboundRequest) {
         final KeyMid key = new KeyMid(inboundRequest.getMessage());
         Entry entry;
+
+        if (key.isMulticast()) {
+            // We can't deduplicate requests coming from multicast addresses.
+            // This shouldn't really ever happen.
+            super.handleInboundRequest(inboundRequest);
+            return;
+        }
 
         synchronized (mLookupTable) {
             entry = mLookupTable.get(key);
@@ -121,6 +131,13 @@ class DeduplicationLayer extends AbstractLayer {
         final KeyMid key = new KeyMid(msg);
         Entry entry;
         boolean entryIsNew = false;
+
+        if (key.isMulticast()) {
+            // We can't deduplicate responses coming from multicast addresses.
+            // This shouldn't really ever happen.
+            super.handleInboundResponse(localEndpoint, msg, outboundMessageHandler);
+            return;
+        }
 
         synchronized (mLookupTable) {
             entry = mLookupTable.get(key);

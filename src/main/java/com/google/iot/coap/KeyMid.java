@@ -15,17 +15,19 @@
  */
 package com.google.iot.coap;
 
+import org.checkerframework.checker.nullness.qual.Nullable;
+
 import java.net.SocketAddress;
 import java.util.Objects;
 
 /** Class for associating messages to transactions using the message id field. */
 final class KeyMid {
     private int mMid;
-    private final SocketAddress mSocketAddress;
+    private final @Nullable SocketAddress mSocketAddress;
     private int mHash;
     private final boolean mIsMulticast;
 
-    KeyMid(int mid, SocketAddress socketAddress) {
+    public KeyMid(int mid, @Nullable SocketAddress socketAddress) {
         mSocketAddress = socketAddress;
         mIsMulticast = Utils.isSocketAddressMulticast(socketAddress);
         setMid(mid);
@@ -33,11 +35,17 @@ final class KeyMid {
 
     public void setMid(int mid) {
         mMid = mid;
-        mHash = Integer.hashCode(mid) * 1337;
+        mHash = Integer.hashCode(mid);
+        // Note that the socket address explicitly isn't included in the hash
+        // to ensure that multicast comparisons work properly.
     }
 
     KeyMid(Message msg) {
         this(msg.getMid(), msg.getRemoteSocketAddress());
+    }
+
+    public boolean isMulticast() {
+        return mIsMulticast;
     }
 
     @Override

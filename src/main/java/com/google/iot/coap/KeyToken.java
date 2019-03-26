@@ -15,6 +15,8 @@
  */
 package com.google.iot.coap;
 
+import org.checkerframework.checker.nullness.qual.Nullable;
+
 import java.net.SocketAddress;
 import java.util.Objects;
 
@@ -24,11 +26,11 @@ import java.util.Objects;
  */
 final class KeyToken {
     private Token mToken;
-    private final SocketAddress mSocketAddress;
+    private final @Nullable SocketAddress mSocketAddress;
     private int mHash;
     private final boolean mIsMulticast;
 
-    KeyToken(Token token, SocketAddress socketAddress) {
+    KeyToken(Token token, @Nullable SocketAddress socketAddress) {
         mSocketAddress = socketAddress;
         mIsMulticast = Utils.isSocketAddressMulticast(socketAddress);
         setToken(token);
@@ -40,7 +42,9 @@ final class KeyToken {
 
     public void setToken(Token token) {
         mToken = token;
-        mHash = Objects.hashCode(token) * 1337;
+        mHash = Objects.hashCode(token);
+        // Note that the socket address explicitly isn't included in the hash
+        // to ensure that multicast comparisons work properly.
     }
 
     public Token getToken() {

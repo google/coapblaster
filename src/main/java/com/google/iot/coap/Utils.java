@@ -59,7 +59,7 @@ class Utils {
         return ret;
     }
 
-    static boolean isSocketAddressMulticast(SocketAddress socketAddress) {
+    static boolean isSocketAddressMulticast(@Nullable SocketAddress socketAddress) {
         if (socketAddress instanceof InetSocketAddress) {
             InetSocketAddress inetsaddr = (InetSocketAddress) socketAddress;
             InetAddress addr = inetsaddr.getAddress();

@@ -92,4 +92,24 @@ class KeyMidTest {
         assertNotEquals(keyA, keyB);
         assertNotEquals(keyB, keyA);
     }
+
+    @Test
+    void equalsMulticast() throws Exception {
+        SocketAddress socketA;
+        SocketAddress socketB;
+        KeyMid keyA;
+        KeyMid keyB;
+
+        socketA =
+                new InetSocketAddress(
+                        InetAddress.getByAddress("hostname", new byte[] {(byte)224, 0, 1, (byte)187}), 123);
+        keyA = new KeyMid(1234, socketA);
+        socketB =
+                new InetSocketAddress(
+                        InetAddress.getByAddress("hostname", new byte[] {1, 2, 3, 5}), 123);
+        keyB = new KeyMid(1234, socketB);
+        assertEquals(keyA, keyB);
+        assertEquals(keyB, keyA);
+        assertEquals(keyA.hashCode(), keyB.hashCode());
+    }
 }
