@@ -558,11 +558,7 @@ final class TransactionImpl implements Transaction, OutboundMessageHandler {
             notifyAll();
         } else {
             LOGGER.warning("Can't handle " + exception + " because transaction is inactive");
-
-            if (exception instanceof RuntimeException) {
-                throw new CoapRuntimeException(
-                        "Transaction inactive, can't handle exception", exception);
-            }
+            exception.printStackTrace();
         }
     }
 }
