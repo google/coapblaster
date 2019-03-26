@@ -125,9 +125,23 @@ public class BehaviorContext {
         return 2 * getCoapMaxLatencyMs() + getCoapProcessingDelayMs();
     }
 
-    /** RFC7252 EXCHANGE_LIFETIME, in milliseconds */
+    /** RFC7252 EXCHANGE_LIFETIME, in milliseconds.
+     *
+     * With the default RFC7252 constants, this value is 247,000 milliseconds.
+     */
     public int getCoapExchangeLifetimeMs() {
         return getCoapMaxTransmitSpanMs() + 2 * getCoapMaxLatencyMs() + getCoapProcessingDelayMs();
+    }
+
+    /**
+     * Maximum number of confirmable messages that can be sent
+     * per second without running out of unique message ids.
+     *
+     * With the default RFC7252 constants, this value is 265 unique confirmable messages per
+     * second to a given endpoint. That is around 3.7ms between messages.
+     */
+    public int getMaxMessageRatePerSecond() {
+        return (65535*1000)/getCoapExchangeLifetimeMs();
     }
 
     /** RFC7252 NON_LIFETIME, in milliseconds */
