@@ -17,10 +17,7 @@ package com.google.iot.coap;
 
 import java.lang.ref.WeakReference;
 import java.net.SocketAddress;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.Random;
+import java.util.*;
 import java.util.logging.Logger;
 import org.checkerframework.checker.nullness.qual.Nullable;
 
@@ -31,18 +28,19 @@ final class TransactionLookupSimple implements TransactionLookup {
 
     private final Map<KeyMid, WeakReference<OutboundMessageHandler>> mMapMid = new HashMap<>();
     private final Map<KeyToken, WeakReference<OutboundMessageHandler>> mMapToken = new HashMap<>();
+    private final WeakHashMap<OutboundMessageHandler, KeyMid> mReverseMapMid = new WeakHashMap<>();
     private static final Random mRandom = new Random();
 
     TransactionLookupSimple() {}
 
     @Override
-    public synchronized int getNextMidForSocketAddress(SocketAddress socketAddress) {
-        int ret = (mRandom.nextInt() & 0x0000FFFF);
+    public synchronized int getNextMidForSocketAddress(@Nullable SocketAddress socketAddress) {
+        int ret = (mRandom.nextInt() & 0xFFFF);
         int retries = 0;
         KeyMid key = new KeyMid(ret, socketAddress);
 
         while (mMapMid.containsKey(key)) {
-            if (retries++ >= Short.MAX_VALUE) {
+            if (retries++ >= 0xFFFF) {
                 String message =
                         "Unable to allocate unused MID, "
                                 + mMapMid.size()
@@ -50,20 +48,20 @@ final class TransactionLookupSimple implements TransactionLookup {
                 LOGGER.warning(message);
                 throw new CoapRuntimeException(message);
             }
-            ret = ((ret + 1) & 0x0000FFFF);
+            ret = ((ret + 1) & 0xFFFF);
             key.setMid(ret);
         }
 
         return ret;
     }
 
-    private synchronized Token getNextTokenForSocketAddress(SocketAddress socketAddress) {
-        int ret = (mRandom.nextInt() & 0x0000FFFF);
+    private synchronized Token getNextTokenForSocketAddress(@Nullable SocketAddress socketAddress) {
+        int ret = (mRandom.nextInt() & 0xFFFF);
         int retries = 0;
         KeyToken key = new KeyToken(Token.tokenFromInteger(ret), socketAddress);
 
         while (mMapToken.containsKey(key) || ret == 0) {
-            if (retries++ >= Short.MAX_VALUE) {
+            if (retries++ >= 0xFFFF) {
                 String message =
                         "Unable to allocate unused token, "
                                 + mMapToken.size()
@@ -71,7 +69,7 @@ final class TransactionLookupSimple implements TransactionLookup {
                 LOGGER.warning(message);
                 throw new CoapRuntimeException(message);
             }
-            ret = ((ret + 1) & 0x0000FFFF);
+            ret = ((ret + 1) & 0xFFFF);
 
             key.setToken(Token.tokenFromInteger(ret));
         }
@@ -81,7 +79,7 @@ final class TransactionLookupSimple implements TransactionLookup {
 
     @Override
     public synchronized Token newToken(
-            SocketAddress socketAddress, @Nullable OutboundMessageHandler handler) {
+            @Nullable SocketAddress socketAddress, @Nullable OutboundMessageHandler handler) {
         Token ret = getNextTokenForSocketAddress(socketAddress);
         WeakReference<OutboundMessageHandler> reference = new WeakReference<>(handler);
         mMapToken.put(new KeyToken(ret, socketAddress), reference);
@@ -92,14 +90,25 @@ final class TransactionLookupSimple implements TransactionLookup {
     public synchronized void registerTransaction(
             MutableMessage message, @Nullable OutboundMessageHandler handler) {
         WeakReference<OutboundMessageHandler> reference = new WeakReference<>(handler);
-        if (message.getMid() == Message.MID_NONE) {
-            message.setMid(getNextMidForSocketAddress(message.getRemoteSocketAddress()));
+
+        if (mReverseMapMid.containsKey(handler)) {
+            mMapMid.put(mReverseMapMid.get(handler), new WeakReference<>(null));
+            mReverseMapMid.remove(handler);
+            if (DEBUG) LOGGER.info("Changing MID associated with transaction");
         }
-        mMapMid.put(new KeyMid(message), reference);
+
+        SocketAddress addr = message.getRemoteSocketAddress();
+
+        if (message.getMid() == Message.MID_NONE) {
+            message.setMid(getNextMidForSocketAddress(addr));
+        }
+        KeyMid keyMid = new KeyMid(message);
+        mMapMid.put(keyMid, reference);
+        mReverseMapMid.put(handler, keyMid);
 
         if (message.getCode() != Code.EMPTY) {
             if (message.hasEmptyToken()) {
-                message.setToken(newToken(message.getRemoteSocketAddress(), handler));
+                message.setToken(newToken(addr, handler));
             } else {
                 mMapToken.put(new KeyToken(message), reference);
             }
@@ -108,9 +117,11 @@ final class TransactionLookupSimple implements TransactionLookup {
 
     @Override
     public synchronized OutboundMessageHandler lookupTransaction(Message message) {
-        final KeyMid keyMid = new KeyMid(message);
-        WeakReference<OutboundMessageHandler> reference = mMapMid.get(keyMid);
         OutboundMessageHandler ret;
+        final KeyMid keyMid = new KeyMid(message);
+
+        WeakReference<OutboundMessageHandler> reference = mMapMid.get(keyMid);
+        // `reference` now holds MID-based OutboundMessageHandler
 
         if (reference != null) {
             ret = reference.get();
@@ -119,23 +130,27 @@ final class TransactionLookupSimple implements TransactionLookup {
             ret = null;
         }
 
+
         if (!message.hasEmptyToken()) {
             final KeyToken keyToken = new KeyToken(message);
             reference = mMapToken.get(keyToken);
+            // `reference` now holds token-based OutboundMessageHandler
         }
 
         if (ret == null) {
             if (reference != null) {
+
                 ret = reference.get();
                 if (DEBUG && ret == null) LOGGER.info("Transaction was collected");
             }
         } else if (reference != null) {
             OutboundMessageHandler trans_token = reference.get();
             if ((trans_token != null) && !trans_token.equals(ret)) {
-                // The transaction for the token and mid don't match!
-                // We don't return either transaction in this case.
-                if (DEBUG) LOGGER.warning("MID/Token mismatch");
-                ret = null;
+                // The transaction for the token and mid don't match.
+                // We return the token holder in this case.
+                LOGGER.warning("BUG: MID/Token mismatch, (Token:"  + trans_token
+                        + "; MID:" + ret + ")");
+                ret = trans_token;
             }
         }
         return ret;
@@ -145,6 +160,7 @@ final class TransactionLookupSimple implements TransactionLookup {
     public synchronized void reset() {
         mMapMid.clear();
         mMapToken.clear();
+        mReverseMapMid.clear();
     }
 
     @Override
