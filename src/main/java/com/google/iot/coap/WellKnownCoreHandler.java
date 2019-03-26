@@ -60,7 +60,7 @@ import java.util.Map;
  * the link format listing with additional attributes.
  */
 public final class WellKnownCoreHandler implements InboundRequestHandler, LinkFormat.Provider {
-    private final HashMap<String, InboundRequestHandler> mChildren = new LinkedHashMap<>();
+    private final HashMap<URI, InboundRequestHandler> mChildren = new LinkedHashMap<>();
 
     private volatile Observable mObservable;
 
@@ -92,7 +92,11 @@ public final class WellKnownCoreHandler implements InboundRequestHandler, LinkFo
             path = "/" + path;
         }
 
-        mChildren.put(path, rh);
+        addResource(URI.create(path), rh);
+    }
+
+    public void addResource(URI uri, InboundRequestHandler rh) {
+        mChildren.put(uri, rh);
 
         Observable dependent = getObservableDependentForChild(rh);
 
@@ -101,10 +105,18 @@ public final class WellKnownCoreHandler implements InboundRequestHandler, LinkFo
         }
     }
 
-    public void removeResource(String name) {
-        InboundRequestHandler rh = mChildren.get(name);
+    public void removeResource(String path) {
+        if (!path.startsWith("/")) {
+            // We only deal with absolute paths.
+            path = "/" + path;
+        }
+        removeResource(URI.create(path));
+    }
+
+    public void removeResource(URI uri) {
+        InboundRequestHandler rh = mChildren.get(uri);
         if (rh != null) {
-            mChildren.remove(name);
+            mChildren.remove(uri);
             Observable dependent = getObservableDependentForChild(rh);
             if (dependent != null) {
                 getObservable().removeDependency(dependent);
@@ -113,7 +125,7 @@ public final class WellKnownCoreHandler implements InboundRequestHandler, LinkFo
     }
 
     public void removeResource(InboundRequestHandler rh) {
-        for (Map.Entry<String, InboundRequestHandler> entry : new HashMap<>(mChildren).entrySet()) {
+        for (Map.Entry<URI, InboundRequestHandler> entry : new HashMap<>(mChildren).entrySet()) {
             removeResource(entry.getKey());
         }
     }
@@ -125,9 +137,9 @@ public final class WellKnownCoreHandler implements InboundRequestHandler, LinkFo
         }
     }
 
-    private String getPathForChild(InboundRequestHandler rh) {
+    private URI getURIForChild(InboundRequestHandler rh) {
         synchronized (mChildren) {
-            for (Map.Entry<String, InboundRequestHandler> entry : mChildren.entrySet()) {
+            for (Map.Entry<URI, InboundRequestHandler> entry : mChildren.entrySet()) {
                 if (entry.getValue().equals(rh)) {
                     return entry.getKey();
                 }
@@ -185,11 +197,7 @@ public final class WellKnownCoreHandler implements InboundRequestHandler, LinkFo
                         provider = null;
                     }
 
-                    if (v instanceof Resource) {
-                        item = builder.addLink(URI.create(k + "/"));
-                    } else {
-                        item = builder.addLink(URI.create(k));
-                    }
+                    item = builder.addLink(k);
 
                     if (provider != null) {
                         item.useParamProvider(provider);
