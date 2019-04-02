@@ -102,11 +102,19 @@ public final class OptionSet {
 
         if (queryList != null && !queryList.isEmpty()) {
             StringBuilder builder = new StringBuilder();
-            for (String unescapedQuery : queryList) {
+            for (String queryComponent : queryList) {
                 if (builder.length() != 0) {
                     builder.append("&");
                 }
-                builder.append(Utils.uriEscapeString(unescapedQuery));
+
+                if (queryComponent.contains("=")) {
+                    queryComponent = Utils.uriEscapeString(queryComponent)
+                            .replaceFirst("%3D","=");
+                } else {
+                    queryComponent = Utils.uriEscapeString(queryComponent);
+                }
+
+                builder.append(queryComponent);
             }
             query = builder.toString();
         }

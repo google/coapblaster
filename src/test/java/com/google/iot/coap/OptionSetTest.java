@@ -19,6 +19,8 @@ import static org.junit.jupiter.api.Assertions.*;
 
 import org.junit.jupiter.api.Test;
 
+import java.net.URI;
+
 @SuppressWarnings("ConstantConditions")
 class OptionSetTest {
 
@@ -198,6 +200,24 @@ class OptionSetTest {
 
         assertEquals(2, set.size());
         assertTrue(set.hasOption(Option.URI_QUERY));
+    }
+
+    @Test
+    void getUri() {
+        OptionSet set = new OptionSet();
+        URI uri = URI.create("coap://192.168.33.20/5/s/levl/v?inc&d=2.0");
+
+        assertEquals(uri.getQuery(), "inc&d=2.0");
+        assertEquals(uri.getRawQuery(), "inc&d=2.0");
+
+        set.setUri(uri);
+
+        assertTrue(set.getUriQueries().contains("d=2.0"));
+        assertTrue(set.getUriQueries().contains("inc"));
+
+        assertEquals(uri, set.getUri());
+        assertEquals(uri.toString(), set.getUri().toString());
+        assertEquals(uri.toASCIIString(), set.getUri().toASCIIString());
     }
 
     @Test
