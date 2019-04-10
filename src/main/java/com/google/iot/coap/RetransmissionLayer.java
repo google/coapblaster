@@ -26,6 +26,7 @@ final class RetransmissionLayer extends AbstractLayer {
             Logger.getLogger(RetransmissionLayer.class.getCanonicalName());
 
     private final Map<KeyMid, Entry> mMidLookupTable = new ConcurrentHashMap<>();
+    private final Map<OutboundMessageHandler, Entry> mHandlerLookupTable = new ConcurrentHashMap<>();
 
     private class Entry extends Transaction.Callback {
         private final KeyMid mKey;
@@ -99,6 +100,9 @@ final class RetransmissionLayer extends AbstractLayer {
         synchronized void close() {
             mIsClosed = true;
             mMidLookupTable.remove(mKey);
+            if (mHandler != null) {
+                mHandlerLookupTable.remove(mHandler);
+            }
 
             if (mTransaction != null) {
                 mTransaction.unregisterCallback(this);
@@ -138,13 +142,18 @@ final class RetransmissionLayer extends AbstractLayer {
 
         void retransmit() {
             if (!mIsClosed) {
+                OutboundMessageHandler handler = mHandler;
+
                 if (DEBUG) LOGGER.info("retransmit @ " + mRetransmitCount);
+
                 mRetransmitCount++;
+
                 if (mHandler == null) {
                     handleOutboundResponse(mLocalEndpoint, mMessage);
                 } else {
-                    handleOutboundRequest(mLocalEndpoint, mMessage, mHandler);
+                    handleOutboundRequest(mLocalEndpoint, mMessage, handler);
                 }
+
                 if (mRetransmitCount < mBehaviorContext.getCoapMaxRetransmit()) {
                     scheduleRetransmit();
                 }
@@ -206,6 +215,13 @@ final class RetransmissionLayer extends AbstractLayer {
             if (!mMidLookupTable.containsKey(key)) {
                 Entry entry = new Entry(key, localEndpoint, msg, outboundMessageHandler);
                 mMidLookupTable.put(key, entry);
+
+                if (outboundMessageHandler != null) {
+                    if (mHandlerLookupTable.containsKey(outboundMessageHandler)) {
+                        mHandlerLookupTable.get(outboundMessageHandler).close();
+                    }
+                    mHandlerLookupTable.put(outboundMessageHandler, entry);
+                }
             }
         }
         super.handleOutboundRequest(localEndpoint, msg, outboundMessageHandler);
