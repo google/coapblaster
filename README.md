@@ -93,7 +93,7 @@ to download, build, and install that project first.
 Gradle:
 
     dependencies {
-	  compile 'com.google.iot.coap:coap:0.02.00'
+	  compile 'com.google.iot.coap:coap:0.02.01'
 	}
 
 Maven:
@@ -101,7 +101,7 @@ Maven:
     <dependency>
 	  <groupId>com.google.iot.coap</groupId>
 	  <artifactId>coap</artifactId>
-	  <version>0.02.00</version>
+	  <version>0.02.01</version>
     </dependency>
 
 ## Building and Installing ##

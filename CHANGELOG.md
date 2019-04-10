@@ -1,6 +1,12 @@
 Change Log
 ==========
 
+## Version 0.02.01
+_2019-04-09_
+ * RetransmissionLayer: Don't retransmit obsolete messages
+ * Transactions: Fix for transaction-based observing.
+ * pom.xml: Fixes for Java 10 build
+
 ## Version 0.02.00
 _2019-04-03_
 * OptionSet: Fix bug in getUri() that corrupts the query
