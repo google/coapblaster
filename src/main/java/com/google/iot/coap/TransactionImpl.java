@@ -32,6 +32,19 @@ final class TransactionImpl implements Transaction, OutboundMessageHandler {
     private static final int MIN_OBSERVATION_REFRESH_TIMEOUT = 10; // in seconds
     static final int DEFAULT_OBSERVATION_REFRESH_TIMEOUT = 20; // in seconds
 
+    // From RFC7641 section 3.4
+    private static final int OBS_ROLLOVER = (1<<23);
+
+    // From RFC7641 section 3.4
+    private static final long OBS_RESYNC_NS = TimeUnit.SECONDS.toNanos(128);
+
+    // From RFC7641 section 3.4
+    private static boolean rfc7641FreshCheck(int V1, int V2, long T1, long T2) {
+        return ((V1 < V2) && (V2 - V1 < OBS_ROLLOVER))
+                || ((V1 > V2) && (V1 - V2 > OBS_ROLLOVER))
+                || (T2 > T1 + OBS_RESYNC_NS);
+    }
+
     private final LocalEndpointManager mLocalEndpointManager;
     private LocalEndpoint mLocalEndpoint;
 
@@ -53,6 +66,8 @@ final class TransactionImpl implements Transaction, OutboundMessageHandler {
 
     private final MutableMessage mRequest;
     private volatile Message mResponse = null;
+    private volatile long mResponseReceivedAt = 0;
+    private volatile int mResponseObserveCount = 0;
     private volatile Exception mException = null;
 
     private final BehaviorContext mBehaviorContext;
@@ -124,6 +139,8 @@ final class TransactionImpl implements Transaction, OutboundMessageHandler {
         mException = null;
         if (isFinishedAfterFirstResponse()) {
             mResponse = null;
+            mResponseObserveCount = 0;
+            mResponseReceivedAt = 0;
         }
 
         // Reset the MID for the message this will
@@ -443,19 +460,15 @@ final class TransactionImpl implements Transaction, OutboundMessageHandler {
             mCallbacks.forEach((cb, exec) -> exec.execute(cb::onTransactionAcknowledged));
 
         } else {
+            long msgReceivedAt = System.nanoTime();
 
             if (mIsObserving) {
-                int prevObserve = 0;
-                int nextObserve = 0;
-
-                if (mResponse != null && mResponse.getOptionSet().hasObserve()) {
-                    //noinspection ConstantConditions
-                    prevObserve = mResponse.getOptionSet().getObserve();
-                }
+                int prevObs = mResponseObserveCount;
+                int nextObs = 0;
 
                 if (msg.getOptionSet().hasObserve()) {
                     //noinspection ConstantConditions
-                    nextObserve = msg.getOptionSet().getObserve();
+                    nextObs = msg.getOptionSet().getObserve();
                 }
 
                 // restart observation timer
@@ -467,10 +480,11 @@ final class TransactionImpl implements Transaction, OutboundMessageHandler {
                 }
 
                 // Verify that the messages are arriving in-order.
-                if ((nextObserve > 0) && (prevObserve >= nextObserve)) {
-                    // The observer count isn't sequentially increasing,
-                    // so we ignore this message.
-                    if (DEBUG && (prevObserve > nextObserve)) {
+                if ((msg.getType() != Type.ACK) // Consider piggy-backed responses as truth
+                        && !rfc7641FreshCheck(prevObs, nextObs, mResponseReceivedAt, msgReceivedAt)
+                        ) {
+                    // This message isn't fresh, so we ignore it.
+                    if (DEBUG && (prevObs > nextObs)) {
                         LOGGER.info(
                                 "Dropping "
                                         + msg.toShortString()
@@ -480,9 +494,12 @@ final class TransactionImpl implements Transaction, OutboundMessageHandler {
                     resetObservationRetryTimer();
                     return;
                 }
+
+                mResponseObserveCount = nextObs;
             }
 
             mResponse = msg;
+            mResponseReceivedAt = msgReceivedAt;
 
             if (isFinishedAfterFirstResponse()) {
                 mIsActive = false;
