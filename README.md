@@ -61,9 +61,13 @@ Program:
 
     Transaction transaction = client.newRequestBuilder().send();
 
-    Message response = transaction.getResponse();
-
-    System.out.println("Got response: " + response);
+    try {
+        Message response = transaction.getResponse();
+        System.out.println("Got response: " + response);
+	
+    } catch(Exception exception) {
+        System.out.println("Exception: " + exception);
+    }
 
 Which will print out a long line which looks something like this:
 
