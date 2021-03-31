@@ -137,7 +137,7 @@
     <dependency>
       <groupId>com.google.guava</groupId>
       <artifactId>guava</artifactId>
-      <version>23.5-android</version>
+      <version>29.0-android</version>
     </dependency>
     <dependency>
       <groupId>org.mockito</groupId>
